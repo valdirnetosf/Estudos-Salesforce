@@ -1,0 +1,53 @@
+<template>
+    <lightning-card title="Busca Cep">
+        <div class="slds-p-around_medium">
+            
+             <div class="slds-m-top_small">
+                <lightning-input label="CEP" placeholder="Ex: 00000-000"
+                value={cep} onchange={handleCepChange}
+                onkeydown={handleKeyDown}>
+                </lightning-input>
+            </div>
+
+             <div class="slds-m-top_small">
+                <lightning-input label="Nome da Rua" placeholder="Ex: Rua Exemplo"
+                value={rua} onchange={handleRuaChange}
+                onkeydown={handleKeyDown}>
+                </lightning-input>
+            </div>
+
+            <div class="slds-m-top_small">
+                <lightning-input label="Nome da Cidade" placeholder="Ex: Rua Fortaleza"
+                value={cidade} onchange={handleCidadeChange}
+                onkeydown={handleKeyDown}>
+                </lightning-input>
+            </div>
+
+            <div class="slds-m-top_small">
+                <lightning-input label="UF" placeholder="Ex: CE"
+                value={uf} onchange={handleUfChange}
+                onkeydown={handleKeyDown}>
+                </lightning-input>
+            </div>
+
+            <div class="slds-m-top_small">
+                <lightning-button label="Buscar" variant="brand"
+                onclick={handleBuscar}>   
+                </lightning-button>
+            </div>
+            
+                <template if:true={enderecos}>
+                    <template for:each={enderecos} for:item="item">
+                        <div key={item.cep} class="slds-m-top_small slds-box slds-theme_shade">
+                            <p><strong>Logradouro:</strong> {item.logradouro}</p>
+                            <p><strong>Bairro:</strong> {item.bairro}</p>
+                            <p><strong>Cidade:</strong> {item.localidade}</p>
+                            <p><strong>Estado:</strong> {item.uf}</p>
+                            <p><strong>CEP:</strong> {item.cep}</p>
+                        </div>
+                    </template>
+                </template>
+
+        </div>
+    </lightning-card>
+</template>
