@@ -1,0 +1,92 @@
+<template>
+    <lightning-card title="Busca de CEP" icon-name="utility:location">
+        <div class="slds-p-around_medium">
+
+            <lightning-combobox
+                name="modoBusca"
+                label="O que você quer fazer?"
+                placeholder="Selecione uma opção..."
+                options={opcoesModo}
+                value={modoBusca}
+                onchange={handleMudancaModo}>
+            </lightning-combobox>
+
+         
+            <template lwc:if={mostrarBlocoCep}>
+                <div class="slds-p-top_medium">
+
+                    
+                        
+                    
+                    <lightning-input
+                        type="text"
+                        label="CEP"
+                        placeholder="Digite o CEP (ex: 01310-100)"
+                        value={cepDigitado}
+                        maxlength="9"
+                        onchange={handleCepChange}>
+                    </lightning-input>
+
+                </div>
+            </template>
+
+            
+            <template lwc:if={mostrarBlocoEndereco}>
+                <div class="slds-p-top_medium">
+
+                    
+                    <lightning-input
+                        type="text"
+                        label="Nome da Rua"
+                        placeholder="Ex: Avenida Paulista"
+                        value={ruaDigitada}
+                        onchange={handleRuaChange}>
+                    </lightning-input>
+
+                    <div class="slds-grid slds-gutters slds-p-top_small">
+
+                        <div class="slds-col slds-size_2-of-3">
+                            
+                            <lightning-input
+                                type="text"
+                                label="Cidade"
+                                placeholder="Ex: São Paulo"
+                                value={cidadeDigitada}
+                                onchange={handleCidadeChange}>
+                            </lightning-input>
+                        </div>
+
+                        <div class="slds-col slds-size_1-of-3">
+                            
+                            <lightning-combobox
+                                name="uf"
+                                label="UF"
+                                placeholder="UF"
+                                options={opcoesUF}
+                                value={ufSelecionada}
+                                onchange={handleUFChange}>
+                            </lightning-combobox>
+                        </div>
+
+                    </div>
+                </div>
+            </template>
+
+            <template if:true={erro}>
+                <div class="slds-text-color_error slds-p-top_medium">{erro}</div>
+            </template>
+
+            <template if:true={enderecos}>
+                <template for:each={enderecos} for:item="item">
+                    <div key={item.cep} class="slds-box slds-m-top_small">
+                        <p><strong>CEP:</strong> {item.cep}</p>
+                        <p><strong>Logradouro:</strong> {item.logradouro}</p>
+                        <p><strong>Bairro:</strong> {item.bairro}</p>
+                        <p><strong>Localidade:</strong> {item.localidade} / {item.uf}</p>
+                    </div>
+                </template>
+            </template>
+
+        </div>
+    </lightning-card>
+</template>
