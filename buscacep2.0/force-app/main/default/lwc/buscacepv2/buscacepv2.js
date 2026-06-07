@@ -1,269 +1,503 @@
-//IMPORTS 
-import { LightningElement } from 'lwc';
-import buscarPorCep from '@salesforce/apex/BuscaCepService.buscarPorCep';
-import buscarPorEndereco from '@salesforce/apex/BuscaCepService.buscarPorEndereco';
 
+// Importações LWC e Apex
 
-//CONSTANTES 
+import { LightningElement, api } from 'lwc';
+
+import buscarPorCep
+from '@salesforce/apex/BuscaCepService.buscarPorCep';
+
+import buscarPorEndereco
+from '@salesforce/apex/BuscaCepService.buscarPorEndereco';
+
+// Lista Estados
 
 const UFS = [
-    'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
-    'MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN',
-    'RS','RO','RR','SC','SP','SE','TO'
+    'AC','AL','AP','AM','BA','CE','DF','ES',
+    'GO','MA','MT','MS','MG','PA','PB','PR',
+    'PE','PI','RJ','RN','RS','RO','RR','SC',
+    'SP','SE','TO'
 ];
 
-const LOCAL_ADDRESS_DATA = [
-    {
-        cep: '01310-100',
-        logradouro: 'Avenida Paulista',
-        bairro: 'Bela Vista',
-        localidade: 'São Paulo',
-        uf: 'SP',
-        cidade: 'São Paulo',
-        rua: 'Avenida Paulista'
-    },
-    {
-        cep: '20040002',
-        logradouro: 'Rua Uruguaiana',
-        bairro: 'Centro',
-        localidade: 'Rio de Janeiro',
-        uf: 'RJ',
-        cidade: 'Rio de Janeiro',
-        rua: 'Rua Uruguaiana'
-    }
-];
 
-//CLASSE 
+// Classe Principal do Componente
+
+
 export default class BuscaCep extends LightningElement {
 
+    // Controles de Tela
 
-    //PROPRIEDADES REATIVAS 
-    //controle de modo e visibilidade
-    modoOperacao         = 'apex';
-    modoBusca            = '';
-    mostrarBlocoCep      = false;
+    modoOperacao = 'apex';
+
+    modoBusca = '';
+
+    mostrarBlocoCep = false;
+
     mostrarBlocoEndereco = false;
 
-    //Campos capturados dos inputs
-    cepDigitado    = '';
-    ruaDigitada    = ''
+   // Infos dadas pelo usuário
+
+    cepDigitado = '';
+
+    ruaDigitada = '';
+
     cidadeDigitada = '';
-    ufSelecionada  = '';
 
-    //Resposta do Apex
+    ufSelecionada = '';
+
+    // Outputs Flow
+
+    @api flowCep = '';
+
+    @api flowLogradouro = '';
+
+    @api flowBairro = '';
+
+    @api flowCidade = '';
+
+    @api flowUf = '';
+
+    // Resultados e erros
+
     enderecos = [];
-    erro      = '';
 
-    //timer do debounce
+    erro = '';
+
     _debounceTimer;
 
+    // Configurações ComboBoxes
 
-    //GETTERS
-
-    //combobox principal
     get opcoesModoOperacao() {
         return [
-            { label: 'LWC - busca local', value: 'lwc'  },
-            { label: 'Apex - busca no servidor', value: 'apex' }
+            {
+                label: 'Apex (back-end)',
+                value: 'apex'
+            },
+            {
+                label: 'JavaScript (LWC - fetch)',
+                value: 'javascript'
+            }
         ];
     }
 
     get opcoesModo() {
+
         return [
-            { label: 'Buscar endereço a partir de um CEP', value: 'cep'      },
-            { label: 'Buscar CEP a partir de um endereço', value: 'endereco' }
+            {
+                label: 'Buscar endereço por CEP',
+                value: 'cep'
+            },
+            {
+                label: 'Buscar CEP por endereço',
+                value: 'endereco'
+            }
         ];
     }
 
     get opcoesUF() {
-        return UFS.map(uf => ({ label: uf, value: uf }));
+
+        return UFS.map(
+            uf => ({
+                label: uf,
+                value: uf
+            })
+        );
     }
 
+    // Cnotroles de habilitação
+
     get podeBuscarPorEndereco() {
+
         return (
-            this.ufSelecionada.length  === 2 &&
-            this.cidadeDigitada.length >= 3  &&
-            this.ruaDigitada.length    >= 3
+            this.ufSelecionada.length === 2 &&
+            this.cidadeDigitada.length >= 3 &&
+            this.ruaDigitada.length >= 3
         );
     }
 
     get notPodeBuscarPorEndereco() {
+
         return !this.podeBuscarPorEndereco;
     }
 
+    get temEnderecos() {
 
-    //HANDLERS E MÉTODOS 
+        return (
+            Array.isArray(this.enderecos) &&
+            this.enderecos.length > 0
+        );
+    }
 
-    //troca de modo, sem mudança
+    // Sistema de troca de modos
+
     handleMudancaOperacao(event) {
+
         this.modoOperacao = event.detail.value;
-        this.erro = '';
-        this.enderecos = [];
     }
 
     handleMudancaModo(event) {
+
         this.modoBusca = event.detail.value;
 
-        // Reseta os campos ao trocar de modo
-        this.cepDigitado    = '';   
-        this.ruaDigitada    = '';
+        this.cepDigitado = '';
+        this.ruaDigitada = '';
         this.cidadeDigitada = '';
-        this.ufSelecionada  = '';
+        this.ufSelecionada = '';
+
         this.erro = '';
+
         this.enderecos = [];
 
-        this.mostrarBlocoCep      = this.modoBusca === 'cep';
-        this.mostrarBlocoEndereco = this.modoBusca === 'endereco';
+        this.resetFlowOutputs();
+
+        this.mostrarBlocoCep =
+            this.modoBusca === 'cep';
+
+        this.mostrarBlocoEndereco =
+            this.modoBusca === 'endereco';
     }
 
-    //método reutilizável de debounce
-    //fn    = a função que vai rodar depois do delay
-    //delay = quantos milissegundos esperar
-    debounce(fn, delay) {
-        clearTimeout(this._debounceTimer);           // cancela o timer anterior
-        this._debounceTimer = setTimeout(fn, delay); // agenda o novo
+    // Saídas do Flow
+
+    resetFlowOutputs() {
+
+        this.flowCep = '';
+        this.flowLogradouro = '';
+        this.flowBairro = '';
+        this.flowCidade = '';
+        this.flowUf = '';
     }
+
+    setEnderecoParaFlow(endereco) {
+
+        if (!endereco) {
+            return;
+        }
+
+        this.flowCep =
+            endereco.cep || '';
+
+        this.flowLogradouro =
+            endereco.logradouro || '';
+
+        this.flowBairro =
+            endereco.bairro || '';
+
+        this.flowCidade =
+            endereco.localidade || '';
+
+        this.flowUf =
+            endereco.uf || '';
+    }
+
+    // Seleção de endereço
+
+    handleSelecionarEndereco(event) {
+
+        const index =
+            Number(
+                event.currentTarget.dataset.index
+            );
+
+        const endereco =
+            this.enderecos[index];
+
+        if (endereco) {
+
+            this.setEnderecoParaFlow(
+                endereco
+            );
+        }
+    }
+
+    // Debounce
+
+    debounce(fn, delay) {
+
+        clearTimeout(
+            this._debounceTimer
+        );
+
+        this._debounceTimer =
+            setTimeout(fn, delay);
+    }
+
+    // Busca Cep
 
     async buscarPorCep() {
+
         this.erro = '';
+
+        this.resetFlowOutputs();
+
         try {
-            if (this.modoOperacao === 'lwc') {
-                const resultado = this.buscarPorCepLocal(this.cepDigitado);
+
+            if (this.modoOperacao === 'apex') {
+
+                const resultado = await buscarPorCep({
+                    cep: this.cepDigitado
+                });
+
                 this.enderecos = resultado ? [resultado] : [];
-                return;
+
+                if (resultado) {
+                    this.setEnderecoParaFlow(resultado);
+                } else {
+                    this.erro = 'CEP não encontrado.';
+                }
+
+            } else {
+
+                const resultado = await this.buscarPorCepViaJs();
+
+                this.enderecos = resultado ? [resultado] : [];
+
+                if (resultado) {
+                    this.setEnderecoParaFlow(resultado);
+                } else {
+                    this.erro = 'CEP não encontrado.';
+                }
             }
 
-            const resultado = await buscarPorCep({ cep: this.cepDigitado });
-            this.enderecos = resultado ? [resultado] : [];
         } catch (error) {
+
             this.enderecos = [];
-            this.erro = error?.body?.message || error?.message || 'Erro ao buscar CEP.';
+
+            this.erro =
+                error?.body?.message ||
+                error?.message ||
+                'Erro ao buscar CEP.';
         }
     }
+
+    async buscarPorCepViaJs() {
+
+        const cep = this.cepDigitado;
+
+        try {
+            const res = await fetch(`https://viacep.com.br/ws/${encodeURIComponent(cep)}/json/`);
+
+            if (!res.ok) {
+                throw new Error('Erro na requisição ViaCEP');
+            }
+
+            const data = await res.json();
+
+            if (data.erro) {
+                return null;
+            }
+
+            return {
+                cep: (data.cep || '').replace('-', ''),
+                logradouro: data.logradouro || '',
+                bairro: data.bairro || '',
+                localidade: data.localidade || '',
+                uf: data.uf || ''
+            };
+
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    // Busca Endereço
 
     async buscarPorEndereco() {
+
         this.erro = '';
+
+        this.resetFlowOutputs();
+
         try {
-            if (this.modoOperacao === 'lwc') {
-                this.enderecos = this.buscarPorEnderecoLocal(
-                    this.ufSelecionada,
-                    this.cidadeDigitada,
-                    this.ruaDigitada
-                );
-                return;
+
+            if (this.modoOperacao === 'apex') {
+
+                const resultado = await buscarPorEndereco({
+                    uf: this.ufSelecionada,
+                    cidade: this.cidadeDigitada,
+                    rua: this.ruaDigitada
+                });
+
+                this.enderecos = resultado || [];
+
+            } else {
+
+                const resultado = await this.buscarPorEnderecoViaJs();
+
+                this.enderecos = resultado || [];
             }
 
-            const resultado = await buscarPorEndereco({
-                uf: this.ufSelecionada,
-                cidade: this.cidadeDigitada,
-                rua: this.ruaDigitada
-            });
-            this.enderecos = resultado || [];
+            if (!this.enderecos.length) {
+
+                this.erro = 'Nenhum endereço encontrado.';
+
+            } else if (this.enderecos.length === 1) {
+
+                this.setEnderecoParaFlow(this.enderecos[0]);
+            }
+
         } catch (error) {
+
             this.enderecos = [];
-            this.erro = error?.body?.message || error?.message || 'Erro ao buscar endereço.';
+
+            this.erro =
+                error?.body?.message ||
+                error?.message ||
+                'Erro ao buscar endereço.';
         }
     }
 
-    buscarPorCepLocal(cep) {
-        const normalizado = cep.replace(/\D/g, '');
-        const resultado = LOCAL_ADDRESS_DATA.find(item => item.cep.replace(/\D/g, '') === normalizado);
-        if (!resultado) {
-            this.erro = 'Nenhum CEP local encontrado no modo LWC.';
+    async buscarPorEnderecoViaJs() {
+
+        const uf = this.ufSelecionada;
+        const cidade = this.cidadeDigitada;
+        const rua = this.ruaDigitada;
+
+        try {
+            const url = `https://viacep.com.br/ws/${encodeURIComponent(uf)}/${encodeURIComponent(cidade)}/${encodeURIComponent(rua)}/json/`;
+
+            const res = await fetch(url);
+
+            if (!res.ok) {
+                throw new Error('Erro na requisição ViaCEP');
+            }
+
+            const data = await res.json();
+
+            if (!Array.isArray(data)) {
+                return [];
+            }
+
+            return data.map(d => ({
+                cep: (d.cep || '').replace('-', ''),
+                logradouro: d.logradouro || '',
+                bairro: d.bairro || '',
+                localidade: d.localidade || '',
+                uf: d.uf || ''
+            }));
+
+        } catch (err) {
+            throw err;
         }
-        return resultado;
     }
 
-    buscarPorEnderecoLocal(uf, cidade, rua) {
-        const resultado = LOCAL_ADDRESS_DATA.filter(item =>
-            item.uf === uf &&
-            item.cidade.toLowerCase().includes(cidade.trim().toLowerCase()) &&
-            item.rua.toLowerCase().includes(rua.trim().toLowerCase())
-        );
-        if (!resultado.length) {
-            this.erro = 'Nenhum endereço local encontrado no modo LWC.';
-        }
-        return resultado;
-    }
+    // =================================================
+    // CEP
+    // =================================================
 
-    //captura o CEP digitado
     handleCepChange(event) {
-        this.cepDigitado = event.detail.value
-            .replace(/\D/g, '')  // remove tudo que não for número
-            .substring(0, 8);    // limita a 8 dígitos
 
-        // Se for modo APEX, busca automática em tempo real com debounce
-        if (this.modoOperacao === 'apex') {
-            this.debounce(() => {
-                if (this.cepDigitado.length === 8) {
-                    this.buscarPorCep();
-                }
-            }, 400);
-        }
+        this.cepDigitado =
+            event.detail.value
+                .replace(/\D/g, '')
+                .substring(0, 8);
+
+        this.debounce(() => {
+
+            if (
+                this.cepDigitado.length === 8
+            ) {
+
+                this.buscarPorCep();
+            }
+
+        }, 500);
     }
 
-    //disparado ao pressionar tecla no input de CEP
-    handleCepKeyPress(event) {
+    handleCepKeyDown(event) {
+
         if (event.key === 'Enter') {
+
             this.handleBuscarCep();
         }
     }
 
-    //disparado ao clicar no botão de busca
     handleBuscarCep() {
-        if (this.cepDigitado.length === 8) {
+
+        if (
+            this.cepDigitado.length === 8
+        ) {
+
             this.buscarPorCep();
+
         } else {
-            this.erro = 'Por favor, digite 8 dígitos do CEP.';
+
+            this.erro =
+                'Digite um CEP válido.';
         }
     }
 
-    //captura a rua digitada
+    // =================================================
+    // ENDEREÇO
+    // =================================================
+
     handleRuaChange(event) {
-        this.ruaDigitada = event.detail.value;
 
-        // Se for modo APEX, busca automática em tempo real com debounce
-        if (this.modoOperacao === 'apex' && this.podeBuscarPorEndereco) {
+        this.ruaDigitada =
+            event.detail.value;
+
+        if (
+            this.podeBuscarPorEndereco
+        ) {
+
             this.debounce(() => {
+
                 this.buscarPorEndereco();
-            }, 600);
+
+            }, 700);
         }
     }
 
-    //captura a cidade digitada
     handleCidadeChange(event) {
-        this.cidadeDigitada = event.detail.value;
 
-        // Se for modo APEX, busca automática em tempo real com debounce
-        if (this.modoOperacao === 'apex' && this.podeBuscarPorEndereco) {
+        this.cidadeDigitada =
+            event.detail.value;
+
+        if (
+            this.podeBuscarPorEndereco
+        ) {
+
             this.debounce(() => {
+
                 this.buscarPorEndereco();
-            }, 600);
+
+            }, 700);
         }
     }
 
-    //captura a UF selecionada
     handleUFChange(event) {
-        this.ufSelecionada = event.detail.value;
 
-        // Se for modo APEX, busca automática em tempo real com debounce
-        if (this.modoOperacao === 'apex' && this.podeBuscarPorEndereco) {
+        this.ufSelecionada =
+            event.detail.value;
+
+        if (
+            this.podeBuscarPorEndereco
+        ) {
+
             this.debounce(() => {
+
                 this.buscarPorEndereco();
-            }, 600);
+
+            }, 700);
         }
     }
 
-    //disparado ao pressionar tecla nos inputs de endereço
-    handleEnderecoKeyPress(event) {
-        if (event.key === 'Enter' && this.podeBuscarPorEndereco) {
+    handleEnderecoKeyDown(event) {
+
+        if (
+            event.key === 'Enter' &&
+            this.podeBuscarPorEndereco
+        ) {
+
             this.handleBuscarEndereco();
         }
     }
 
-    //disparado ao clicar no botão de busca de endereço
     handleBuscarEndereco() {
-        if (this.podeBuscarPorEndereco) {
+
+        if (
+            this.podeBuscarPorEndereco
+        ) {
+
             this.buscarPorEndereco();
         }
     }
